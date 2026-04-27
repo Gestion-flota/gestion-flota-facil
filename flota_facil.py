@@ -25,7 +25,7 @@ with tab1:
     nombre_conductor = st.text_input("Nombre del Conductor")
     patente = st.text_input("Patente del Camión")
     n_guia = st.text_input("Número de Guía")
-    
+
     # CÁMARA DIRECTA
     foto_camara = st.camera_input("Toma una foto de la guía")
     
