@@ -3,9 +3,9 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 
-# 1. Configuración de Base de Datos
+# Base de datos
 def crear_db():
-    conn = sqlite3.connect('base_nueva_linares.db')
+    conn = sqlite3.connect('datos_logistica.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS reportes
                  (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
@@ -13,79 +13,53 @@ def crear_db():
     conn.commit()
     conn.close()
 
-st.set_page_config(page_title="Gestión de Flota - Linares", layout="wide")
+st.set_page_config(page_title="Control de Flota Profesional", layout="wide")
 crear_db()
 
-tab1, tab2 = st.tabs(["🚛 Registro Conductor", "🔐 Panel Transportista (Privado)"])
+tab1, tab2 = st.tabs(["🚛 Registro Conductor", "🏢 Panel Transportista"])
 
 with tab1:
-    st.header("Envío de Guía")
-    st.info("Conductor: Complete los datos y tome la foto de la guía para enviar.")
-    
-    cod_empresa = st.text_input("Nombre de la Empresa Destino (Cliente)")
+    st.header("Envío de Guía - Sección Conductor")
+    cod_empresa = st.text_input("Código de Empresa")
     nombre_conductor = st.text_input("Nombre del Conductor")
     patente = st.text_input("Patente del Camión")
     n_guia = st.text_input("Número de Guía")
     
+    # CÁMARA DIRECTA
     foto_camara = st.camera_input("Toma una foto de la guía")
     
-    if st.button("Finalizar y Enviar Reporte"):
-        if foto_camara:
-            ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            img_bytes = foto_camara.getvalue()
-            conn = sqlite3.connect('base_nueva_linares.db')
-            c = conn.cursor()
-            c.execute("INSERT INTO reportes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      (cod_empresa, nombre_conductor, patente, n_guia, img_bytes, -35.8406, -71.5941, ahora))
-            conn.commit()
-            conn.close()
-            st.success("✅ Reporte enviado con éxito")
-        else:
-            st.error("⚠️ Error: Debe tomar la foto de la guía para poder enviar el reporte.")
+    # GPS (Linares por defecto, ajustable)
+    st.write("Ubicación actual (GPS)")
+    lat = st.number_input("Latitud", value=-35.8406, format="%.4f")
+    lon = st.number_input("Longitud", value=-71.5941, format="%.4f")
+
+    if st.button("Finalizar y Enviar Reporte") and foto_camara:
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        img_bytes = foto_camara.getvalue()
+        conn = sqlite3.connect('datos_logistica.db')
+        c = conn.cursor()
+        c.execute("INSERT INTO reportes (empresa, conductor, patente, guia, foto, latitud, longitud, fecha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (cod_empresa, nombre_conductor, patente, n_guia, img_bytes, lat, lon, ahora))
+        conn.commit()
+        conn.close()
+        st.success("✅ Guía enviada con éxito")
 
 with tab2:
-    st.header("Panel de Control del Dueño")
-    clave_maestra = "linares2026" 
-    
-    acceso = st.text_input("Ingrese Clave de Administrador", type="password")
-    
-    if acceso == clave_maestra:
-        st.success("Acceso autorizado")
-        
-        conn = sqlite3.connect('base_nueva_linares.db')
-        # Traemos todos los datos para el transportista
-        query = "SELECT empresa, conductor, patente, guia, foto, fecha FROM reportes ORDER BY fecha DESC"
-        df = pd.read_sql_query(query, conn)
+    st.header("Control de Flota - Sección Transportista")
+    consulta_cod = st.text_input("Ingrese su Clave de Empresa", type="password")
+    if consulta_cod:
+        conn = sqlite3.connect('datos_logistica.db')
+        df = pd.read_sql_query(f"SELECT conductor, patente, guia, fecha, latitud, longitud, foto FROM reportes WHERE empresa='{consulta_cod}'", conn)
         conn.close()
-
+        
         if not df.empty:
-            st.write("### 1. Resumen de Operaciones (Excel)")
-            # Mostramos la tabla sin la columna de foto para que sea limpia
-            st.dataframe(df.drop(columns=['foto']), use_container_width=True)
+            st.dataframe(df.drop(columns=['foto'])) # Mostramos tabla sin los datos crudos de la foto
             
-            # Botón de descarga para el registro mensual
-            csv = df.drop(columns=['foto']).to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Descargar Reporte Mensual (Excel/CSV)",
-                data=csv,
-                file_name=f"reporte_flota_{datetime.now().strftime('%m_%Y')}.csv",
-                mime="text/csv",
-            )
-            
-            st.write("---")
-            st.write("### 2. Galería de Guías Digitales")
-            st.caption("Haga clic en cada fila para ver la foto de la guía enviada.")
-            
-            # Aquí el transportista ve las fotos una por una
-            for index, row in df.iterrows():
-                with st.expander(f"📄 Guía: {row['guia']} | Camión: {row['patente']} | Fecha: {row['fecha']}"):
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        st.write(f"**Conductor:** {row['conductor']}")
-                        st.write(f"**Cliente:** {row['empresa']}")
-                    with col2:
-                        st.image(row['foto'], caption=f"Copia digital de Guía {row['guia']}", use_container_width=True)
-        else:
-            st.info("Aún no hay reportes registrados por los conductores.")
-    elif acceso != "":
-        st.error("❌ Clave incorrecta. Acceso restringido al dueño del transporte.")
+            st.subheader("📍 Ubicación en Mapa")
+            df_mapa = df.rename(columns={'latitud': 'lat', 'longitud': 'lon'})
+            st.map(df_mapa)
+
+            st.subheader("📸 Visualizador de Guías")
+            # Esto permite ver la última foto subida
+            ultima_foto = df['foto'].iloc[-1]
+            st.image(ultima_foto, caption=f"Última guía subida por {df['conductor'].iloc[-1]}", width=400)
