@@ -13,8 +13,6 @@ def crear_db():
     conn.commit()
     conn.close()
 
-    conn.close()
-
 st.set_page_config(page_title="Control de Flota Profesional", layout="wide")
 crear_db()
 
