@@ -20,8 +20,9 @@ tab1, tab2 = st.tabs(["🚛 Registro Conductor", "🔐 Panel Transportista (Priv
 
 with tab1:
     st.header("Envío de Guía")
-    # El conductor solo pone el nombre de la empresa, NO necesita clave
-    cod_empresa = st.text_input("Nombre de la Empresa Destino")
+    st.info("Conductor: Complete los datos y tome la foto de la guía para enviar.")
+    
+    cod_empresa = st.text_input("Nombre de la Empresa Destino (Cliente)")
     nombre_conductor = st.text_input("Nombre del Conductor")
     patente = st.text_input("Patente del Camión")
     n_guia = st.text_input("Número de Guía")
@@ -40,27 +41,51 @@ with tab1:
             conn.close()
             st.success("✅ Reporte enviado con éxito")
         else:
-            st.error("⚠️ Debes tomar la foto para enviar")
+            st.error("⚠️ Error: Debe tomar la foto de la guía para poder enviar el reporte.")
 
 with tab2:
     st.header("Panel de Control del Dueño")
-    # ESTA ES TU CLAVE ÚNICA Y ESPECIAL
     clave_maestra = "linares2026" 
     
     acceso = st.text_input("Ingrese Clave de Administrador", type="password")
     
     if acceso == clave_maestra:
         st.success("Acceso autorizado")
+        
         conn = sqlite3.connect('base_nueva_linares.db')
-        df = pd.read_sql_query("SELECT empresa, conductor, patente, guia, fecha FROM reportes", conn)
+        # Traemos todos los datos para el transportista
+        query = "SELECT empresa, conductor, patente, guia, foto, fecha FROM reportes ORDER BY fecha DESC"
+        df = pd.read_sql_query(query, conn)
         conn.close()
 
         if not df.empty:
-            st.write("### Reportes de Camiones")
-            st.dataframe(df) # Aquí verás lo que el chofer envió
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("Descargar Excel (CSV)", csv, "reportes.csv", "text/csv")
+            st.write("### 1. Resumen de Operaciones (Excel)")
+            # Mostramos la tabla sin la columna de foto para que sea limpia
+            st.dataframe(df.drop(columns=['foto']), use_container_width=True)
+            
+            # Botón de descarga para el registro mensual
+            csv = df.drop(columns=['foto']).to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Descargar Reporte Mensual (Excel/CSV)",
+                data=csv,
+                file_name=f"reporte_flota_{datetime.now().strftime('%m_%Y')}.csv",
+                mime="text/csv",
+            )
+            
+            st.write("---")
+            st.write("### 2. Galería de Guías Digitales")
+            st.caption("Haga clic en cada fila para ver la foto de la guía enviada.")
+            
+            # Aquí el transportista ve las fotos una por una
+            for index, row in df.iterrows():
+                with st.expander(f"📄 Guía: {row['guia']} | Camión: {row['patente']} | Fecha: {row['fecha']}"):
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        st.write(f"**Conductor:** {row['conductor']}")
+                        st.write(f"**Cliente:** {row['empresa']}")
+                    with col2:
+                        st.image(row['foto'], caption=f"Copia digital de Guía {row['guia']}", use_container_width=True)
         else:
-            st.info("No hay reportes nuevos aún.")
+            st.info("Aún no hay reportes registrados por los conductores.")
     elif acceso != "":
-        st.error("❌ Clave incorrecta. Solo el transportista puede ver esto.")
+        st.error("❌ Clave incorrecta. Acceso restringido al dueño del transporte.")
