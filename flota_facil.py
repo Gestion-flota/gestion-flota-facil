@@ -5,7 +5,8 @@ from datetime import datetime
 
 # Base de datos
 def crear_db():
-    conn = sqlite3.connect('datos_vFinal.db')
+    conn = sqlite3.connect('base_nueva_linares.db')
+    
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS reportes
                 (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
@@ -35,7 +36,8 @@ with tab1:
 
     if st.button("Finalizar y Enviar Reporte") and foto_camara:
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        img_bytes = foto_camara.getvalue()
+        conn = sqlite3.connect('base_nueva_linares.db')
+        
         conn = sqlite3.connect('datos_logistica.db')
         c = conn.cursor()
         c.execute("INSERT INTO reportes (empresa, conductor, patente, guia, foto, latitud, longitud, fecha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
