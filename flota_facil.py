@@ -9,6 +9,7 @@ def crear_db():
     
   c = conn.cursor()
   c.execute('''CREATE TABLE IF NOT EXISTS reportes
+
                  (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
                   foto BLOB, latitud REAL, longitud REAL, fecha TEXT)''')
     conn.commit()
