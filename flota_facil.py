@@ -7,8 +7,8 @@ from datetime import datetime
 def crear_db():
  conn = sqlite3.connect('datos_vFinal.db')
     
-c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS reportes
+  c = conn.cursor()
+  c.execute('''CREATE TABLE IF NOT EXISTS reportes
                  (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
                   foto BLOB, latitud REAL, longitud REAL, fecha TEXT)''')
     conn.commit()
