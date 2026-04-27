@@ -5,7 +5,8 @@ from datetime import datetime
 
 # Base de datos
 def crear_db():
-    conn = sqlite3.connect('datos_logistica.db')
+sqlite3.connect('datos_vFinal.db')
+    
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS reportes
                  (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
