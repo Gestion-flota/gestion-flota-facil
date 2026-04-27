@@ -1,63 +1,53 @@
-
+import sqlite3
+import pandas as pd
 import streamlit as st
-from PIL import Image
-from streamlit_js_eval import get_geolocation
 
-# Configuración de la página
-st.title("Gestión de Flota Fácil")
-st.subheader("Registro de Guías y Ubicación GPS")
+# 1. Crear/Conectar a la base de datos (se crea un archivo llamado datos_flota.db)
+def crear_db():
+    conn = sqlite3.connect('datos_flota.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS reportes
+                 (empresa TEXT, patente TEXT, guia TEXT, fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    conn.close()
 
-# 1. Campos de texto
-col1, col2 = st.columns(2)
-with col1:
-    nombre_chofer = st.text_input("Nombre del Chofer")
+# 2. Función para guardar datos
+def guardar_datos(empresa, patente, guia):
+    conn = sqlite3.connect('datos_flota.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO reportes (empresa, patente, guia) VALUES (?, ?, ?)", (empresa, patente, guia))
+    conn.commit()
+    conn.close()
+
+# --- EN TU INTERFAZ DE STREAMLIT ---
+st.title("Control de Flota Profesional")
+
+# Pestañas para separar el trabajo
+tab1, tab2 = st.tabs(["🚛 Registro Chofer", "📊 Panel Dueño"])
+
+with tab1:
+    st.header("Envío de Guía")
+    cod_empresa = st.text_input("Código de Empresa (Entregado por soporte)")
     patente = st.text_input("Patente del Camión")
-    id_clave = st.text_input("ID / Número de Guía")
-with col2:
-    servicio = st.text_input("Servicio / Empresa")
-    destino = st.text_input("Ciudad de Destino")
-    correo = st.text_input("Correo de contacto")
-
-st.divider()
-
-# 2. Captura de GPS
-st.write("### Ubicación de Entrega")
-loc = get_geolocation()
-
-if loc:
-    lat = loc['coords']['LATITUDE'.lower()]
-    lon = loc['coords']['LONGITUDE'.lower()]
+    n_guia = st.text_input("Número de Guía")
     
-    st.success(f"📍 Ubicación capturada: Lat {lat}, Lon {lon}")
-else:
-    st.info("Esperando señal de GPS... (Asegúrese de dar permisos en su celular)")
+    if st.button("Enviar Reporte"):
+        crear_db()
+        guardar_datos(cod_empresa, patente, n_guia)
+        st.success("Reporte enviado con éxito")
 
-st.divider()
-
-# 3. Subida de Foto
-archivo_guia = st.file_uploader("Tome una foto de la guía", type=["png", "jpg", "jpeg"])
-
-if archivo_guia is not None:
-    imagen = Image.open(archivo_guia)
-    st.image(imagen, caption="Vista previa de la guía")
-
-# 4. Botón Guardar
-if st.button("Guardar Datos y Ubicación"):
-    # Aquí irá la lógica para guardar más adelante
-    st.balloons()
-    st.success("¡Datos registrados con éxito!")
-
-    if archivo_guia is not None and loc is not None:
-        # Nombre del archivo con patente y guía
-        nombre_foto = f"guia_{patente}_{id_clave}.png"
+with tab2:
+    st.header("Visualización de Guías")
+    consulta_cod = st.text_input("Ingrese su Código para ver sus datos", type="password")
+    
+    if consulta_cod:
+        conn = sqlite3.connect('datos_flota.db')
+        # Aquí ocurre la magia: solo filtramos por el código de esa empresa
+        df = pd.read_sql_query(f"SELECT patente, guia, fecha FROM reportes WHERE empresa='{consulta_cod}'", conn)
+        conn.close()
         
-        # Guardar foto
-        with open(nombre_foto, "wb") as f:
-            f.write(archivo_guia.getbuffer())
-            
-        # Mensaje final
-        st.balloons()
-        st.success(f"✅ ¡Registro completo!")
-        st.write(f"Chofer: {nombre_chofer} | Ubicación guardada con éxito.")
-    else:
-        st.error("Faltan datos: Asegúrese de subir la foto y permitir el acceso al GPS.")
+        if not df.empty:
+            st.write(f"Mostrando reportes para: {consulta_cod}")
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.warning("No hay datos para este código o el código es incorrecto.")
