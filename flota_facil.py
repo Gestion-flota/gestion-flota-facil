@@ -1,10 +1,18 @@
-import streamlit as st
+4import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Control de Flota Linares", layout="wide")
+st.set_page_config(page_title="Gestión de Flota Pro", layout="centered")
+
+# Estilo CSS para botones grandes y diseño limpio
+st.markdown("""
+    <style>
+    .stButton>button { width: 100%; height: 3.5em; border-radius: 10px; font-weight: bold; }
+    .stCamera { border: 2px solid #007bff; border-radius: 15px; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
 def conectar():
@@ -13,14 +21,10 @@ def conectar():
 def crear_db():
     conn = conectar()
     c = conn.cursor()
-    # Tabla de reportes con GPS y Foto
     c.execute('''CREATE TABLE IF NOT EXISTS reportes
-                 (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
-                  fecha TEXT, ubicacion TEXT)''')
-    # Tabla de Transportistas
+                 (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, fecha TEXT, ubicacion TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS transportistas
                  (nombre_dueño TEXT, nombre_empresa TEXT PRIMARY KEY)''')
-    # Tabla de Camiones
     c.execute('''CREATE TABLE IF NOT EXISTS camiones
                  (patente TEXT PRIMARY KEY, empresa_pertenece TEXT)''')
     conn.commit()
@@ -28,106 +32,102 @@ def crear_db():
 
 crear_db()
 
-# --- 3. NAVEGACIÓN ---
-st.sidebar.title("Navegación")
-seccion = st.sidebar.radio("Ir a:", ["Registro de Conductor", "Panel Administrativo", "Historial de Viajes"])
+# --- 3. LÓGICA DE ACCESO ---
+st.sidebar.title("🚛 Acceso al Sistema")
+conn = conectar()
+lista_e = [f[0] for f in conn.execute("SELECT nombre_empresa FROM transportistas ORDER BY nombre_empresa ASC").fetchall()]
+conn.close()
 
-# --- 4. PANEL ADMINISTRATIVO (CORREGIDO) ---
-if seccion == "Panel Administrativo":
-    st.header("⚙️ Panel Administrativo de Transportistas")
-    st.write("Gestione sus empresas y visualice las patentes asociadas.")
+# El usuario selecciona su empresa UNA SOLA VEZ
+empresa_activa = st.sidebar.selectbox("Seleccione su Empresa:", ["---"] + lista_e)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Registrar Nuevo Dueño/Empresa")
-        n_dueño = st.text_input("Nombre del Dueño")
-        n_empresa = st.text_input("Nombre de la Empresa")
-        if st.button("Guardar Transportista"):
-            if n_dueño and n_empresa:
+if empresa_activa == "---":
+    st.info("### Bienvenida/o\nPor favor, seleccione su empresa en el menú lateral para ingresar.")
+    # Panel para crear empresas nuevas (Solo para ti)
+    with st.expander("Registrar Nueva Empresa (Admin)"):
+        n_e = st.text_input("Nombre de la Empresa")
+        if st.button("Crear Empresa"):
+            if n_e:
                 conn = conectar()
                 try:
-                    conn.execute("INSERT INTO transportistas VALUES (?,?)", (n_dueño, n_empresa))
+                    conn.execute("INSERT INTO transportistas VALUES (?,?)", ("Dueño", n_e))
                     conn.commit()
-                    st.success("Transportista guardado.")
+                    st.success("Empresa creada. Selecciónela en el menú lateral.")
                     st.rerun()
-                except: st.error("La empresa ya existe.")
+                except: st.error("Ya existe.")
                 finally: conn.close()
-
-    with col2:
-        st.subheader("Asociar Patente")
-        conn = conectar()
-        empresas = [f[0] for f in conn.execute("SELECT nombre_empresa FROM transportistas").fetchall()]
-        conn.close()
-
-        if empresas:
-            emp_sel = st.selectbox("Seleccione Empresa:", empresas)
-            nueva_p = st.text_input("Patente (Ej: ABCD-12)")
-            if st.button("Asociar Camión"):
-                conn = conectar()
-                try:
-                    conn.execute("INSERT INTO camiones VALUES (?,?)", (nueva_p, emp_sel))
-                    conn.commit()
-                    st.success(f"Patente {nueva_p} asociada.")
-                    st.rerun()
-                except: st.error("Patente ya registrada.")
-                finally: conn.close()
-
-    st.divider()
-    st.subheader("📋 Patentes Registradas en el Sistema")
-    conn = conectar()
-    df_patentes = pd.read_sql_query("SELECT patente, empresa_pertenece FROM camiones", conn)
-    conn.close()
-    if not df_patentes.empty:
-        st.table(df_patentes) # Aquí visualizas todas las patentes asociadas
-    else:
-        st.info("No hay patentes registradas aún.")
-
-# --- 5. REGISTRO DE CONDUCTOR (CON CÁMARA Y GPS) ---
-if seccion == "Registro de Conductor":
-    st.header("🚛 Registro de Ruta")
+else:
+    # Una vez seleccionada la empresa, se definen los roles
+    rol = st.sidebar.radio("Entrar como:", ["Conductor (Ruta)", "Dueño (Panel Administrativo)"])
     
-    conn = conectar()
-    empresas = [f[0] for f in conn.execute("SELECT nombre_empresa FROM transportistas").fetchall()]
-    conn.close()
+    # --- MÓDULO CONDUCTOR: MÁXIMA SIMPLICIDAD ---
+    if rol == "Conductor (Ruta)":
+        st.header(f"📋 Registro de Salida")
+        st.subheader(empresa_activa)
 
-    if not empresas:
-        st.warning("Primero cargue empresas en el Panel Administrativo.")
-    else:
-        emp_final = st.selectbox("Seleccione su Empresa", empresas)
-        
         conn = conectar()
-        patentes = [f[0] for f in conn.execute("SELECT patente FROM camiones WHERE empresa_pertenece=?", (emp_final,)).fetchall()]
+        patentes = [f[0] for f in conn.execute("SELECT patente FROM camiones WHERE empresa_pertenece=?", (empresa_activa,)).fetchall()]
         conn.close()
 
-        cond = st.text_input("Nombre del Conductor")
-        pat_sel = st.selectbox("Seleccione Patente", patentes)
-        n_guia = st.text_input("N° Guía de Despacho")
+        if not patentes:
+            st.error("⚠️ No tienes camiones asignados. Avisa a tu jefe.")
+        else:
+            cond = st.text_input("Nombre del Conductor", placeholder="Ej: Juan Pérez")
+            n_guia = st.text_input("N° Guía de Despacho", placeholder="00123")
+            pat_sel = st.selectbox("Seleccione Patente", patentes)
+            
+            st.write("---")
+            st.write("📷 **Capturar Guía de Despacho**")
+            # El parámetro 'facing_mode' intenta activar la cámara trasera en móviles
+            foto = st.camera_input("Tome la foto", label_visibility="collapsed")
 
-        # --- CÁMARA ---
-        foto_guia = st.camera_input("Tome una foto a la Guía de Despacho")
+            if st.button("✅ FINALIZAR Y ENVIAR"):
+                if foto and cond and n_guia:
+                    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    conn = conectar()
+                    conn.execute("INSERT INTO reportes VALUES (?,?,?,?,?,?)", 
+                                 (empresa_activa, cond, pat_sel, n_guia, ahora, "Linares, Chile"))
+                    conn.commit()
+                    conn.close()
+                    st.balloons()
+                    st.success("¡Registro enviado con éxito!")
+                else:
+                    st.warning("Completa todos los datos y toma la foto.")
 
-        # --- SIMULACIÓN GPS ---
-        st.write("📍 Ubicación: Linares, Región del Maule (GPS Activado)")
-        geo = "-35.84, -71.59" # Coordenadas de Linares para la prueba
+    # --- MÓDULO DUEÑO: GESTIÓN FÁCIL ---
+    elif rol == "Dueño (Panel Administrativo)":
+        st.header(f"📊 Panel de Control: {empresa_activa}")
+        
+        tab1, tab2 = st.tabs(["🚛 Mi Flota", "📜 Historial de Viajes"])
+        
+        with tab1:
+            st.write("### Agregar Camión a mi Flota")
+            nueva_p = st.text_input("Patente del nuevo camión").upper()
+            if st.button("➕ Registrar Patente"):
+                if nueva_p:
+                    conn = conectar()
+                    try:
+                        conn.execute("INSERT INTO camiones VALUES (?,?)", (nueva_p, empresa_activa))
+                        conn.commit()
+                        st.success("Patente agregada")
+                        st.rerun()
+                    except: st.error("Esa patente ya está en el sistema.")
+                    finally: conn.close()
+            
+            st.write("---")
+            conn = conectar()
+            mis_c = pd.read_sql_query("SELECT patente FROM camiones WHERE empresa_pertenece=?", conn, params=(empresa_activa,))
+            conn.close()
+            st.write(f"**Tienes {len(mis_c)} camiones registrados:**")
+            st.dataframe(mis_c, use_container_width=True)
 
-        if st.button("Finalizar Registro"):
-            if foto_guia and cond and n_guia:
-                ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                conn = conectar()
-                conn.execute("INSERT INTO reportes (empresa, conductor, patente, guia, fecha, ubicacion) VALUES (?,?,?,?,?,?)", 
-                             (emp_final, cond, pat_sel, n_guia, ahora, geo))
-                conn.commit()
-                conn.close()
-                st.balloons()
-                st.success("Registro completado y guardado.")
+        with tab2:
+            st.write("### Registros Recibidos")
+            conn = conectar()
+            mis_v = pd.read_sql_query("SELECT conductor, patente, guia, fecha FROM reportes WHERE empresa=?", 
+                                      conn, params=(empresa_activa,))
+            conn.close()
+            if mis_v.empty:
+                st.info("No hay viajes registrados todavía.")
             else:
-                st.error("Por favor, complete todos los datos y tome la foto.")
-
-# --- 6. HISTORIAL ---
-if seccion == "Historial de Viajes":
-    st.header("📊 Historial de Viajes")
-    conn = conectar()
-    df_h = pd.read_sql_query("SELECT * FROM reportes", conn)
-    conn.close()
-    st.dataframe(df_h, use_container_width=True)
+                st.dataframe(mis_v, use_container_width=True)
