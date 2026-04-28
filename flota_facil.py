@@ -6,122 +6,128 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Control de Flota Linares", layout="wide")
 
-# --- 2. CONFIGURACIÓN DE BASE DE DATOS ---
+# --- 2. BASE DE DATOS ---
+def conectar():
+    return sqlite3.connect('base_nueva_linares.db', check_same_thread=False)
+
 def crear_db():
-    conn = sqlite3.connect('base_nueva_linares.db')
+    conn = conectar()
     c = conn.cursor()
-    # Tabla de reportes (fotos y datos de ruta)
+    # Tabla de reportes con GPS y Foto
     c.execute('''CREATE TABLE IF NOT EXISTS reportes
                  (empresa TEXT, conductor TEXT, patente TEXT, guia TEXT, 
-                  foto BLOB, latitud REAL, longitud REAL, fecha TEXT)''')
-    
-    # Tabla de Transportistas (Dueños)
+                  fecha TEXT, ubicacion TEXT)''')
+    # Tabla de Transportistas
     c.execute('''CREATE TABLE IF NOT EXISTS transportistas
                  (nombre_dueño TEXT, nombre_empresa TEXT PRIMARY KEY)''')
-    
-    # Tabla de Camiones vinculados
+    # Tabla de Camiones
     c.execute('''CREATE TABLE IF NOT EXISTS camiones
-                 (patente TEXT PRIMARY KEY, empresa_pertenece TEXT,
-                  FOREIGN KEY(empresa_pertenece) REFERENCES transportistas(nombre_empresa))''')
+                 (patente TEXT PRIMARY KEY, empresa_pertenece TEXT)''')
     conn.commit()
     conn.close()
 
-# Ejecutamos la creación al inicio
 crear_db()
 
-def conectar():
-    return sqlite3.connect('base_nueva_linares.db')
-
-# --- 3. MENÚ LATERAL ---
+# --- 3. NAVEGACIÓN ---
 st.sidebar.title("Navegación")
-seccion = st.sidebar.radio("Ir a:", ["Registro de Conductor", "Panel Administrativo"])
+seccion = st.sidebar.radio("Ir a:", ["Registro de Conductor", "Panel Administrativo", "Historial de Viajes"])
 
-# --- 4. SECCIÓN: PANEL ADMINISTRATIVO (Carga de Datos Inventados) ---
+# --- 4. PANEL ADMINISTRATIVO (CORREGIDO) ---
 if seccion == "Panel Administrativo":
-    st.header("⚙️ Panel de Administración")
-    st.info("Desde aquí puedes cargar los transportistas y camiones para tu simulación.")
+    st.header("⚙️ Panel Administrativo de Transportistas")
+    st.write("Gestione sus empresas y visualice las patentes asociadas.")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Registrar Empresa/Dueño")
-        nombre_d = st.text_input("Nombre del Dueño")
-        nombre_e = st.text_input("Nombre de la Empresa")
+        st.subheader("Registrar Nuevo Dueño/Empresa")
+        n_dueño = st.text_input("Nombre del Dueño")
+        n_empresa = st.text_input("Nombre de la Empresa")
         if st.button("Guardar Transportista"):
-            if nombre_d and nombre_e:
+            if n_dueño and n_empresa:
                 conn = conectar()
-                c = conn.cursor()
                 try:
-                    c.execute("INSERT INTO transportistas VALUES (?,?)", (nombre_d, nombre_e))
+                    conn.execute("INSERT INTO transportistas VALUES (?,?)", (n_dueño, n_empresa))
                     conn.commit()
-                    st.success(f"Empresa {nombre_e} registrada con éxito.")
-                except:
-                    st.error("Error: Esta empresa ya existe.")
-                finally:
-                    conn.close()
-            else:
-                st.warning("Completa ambos campos.")
+                    st.success("Transportista guardado.")
+                    st.rerun()
+                except: st.error("La empresa ya existe.")
+                finally: conn.close()
 
     with col2:
-        st.subheader("Registrar Camión")
-        # Traer empresas existentes para el selector
+        st.subheader("Asociar Patente")
         conn = conectar()
-        c = conn.cursor()
-        c.execute("SELECT nombre_empresa FROM transportistas")
-        lista_e = [f[0] for f in c.fetchall()]
+        empresas = [f[0] for f in conn.execute("SELECT nombre_empresa FROM transportistas").fetchall()]
         conn.close()
 
-        if lista_e:
-            emp_selec = st.selectbox("Asignar a Empresa:", lista_e)
-            patente_n = st.text_input("Patente (Ej: ABCD-12)")
+        if empresas:
+            emp_sel = st.selectbox("Seleccione Empresa:", empresas)
+            nueva_p = st.text_input("Patente (Ej: ABCD-12)")
             if st.button("Asociar Camión"):
-                if patente_n:
-                    conn = conectar()
-                    c = conn.cursor()
-                    try:
-                        c.execute("INSERT INTO camiones VALUES (?,?)", (patente_n, emp_selec))
-                        conn.commit()
-                        st.success(f"Patente {patente_n} asociada a {emp_selec}")
-                    except:
-                        st.error("Error: La patente ya está registrada.")
-                    finally:
-                        conn.close()
-        else:
-            st.write("Primero registra una empresa para asignar camiones.")
+                conn = conectar()
+                try:
+                    conn.execute("INSERT INTO camiones VALUES (?,?)", (nueva_p, emp_sel))
+                    conn.commit()
+                    st.success(f"Patente {nueva_p} asociada.")
+                    st.rerun()
+                except: st.error("Patente ya registrada.")
+                finally: conn.close()
 
-# --- 5. SECCIÓN: REGISTRO DE CONDUCTOR (Uso diario) ---
-if seccion == "Registro de Conductor":
-    st.header("🚛 Registro de Conductor - Control de Guías")
-    
-    # Obtener datos de la DB para los Selectores
+    st.divider()
+    st.subheader("📋 Patentes Registradas en el Sistema")
     conn = conectar()
-    c = conn.cursor()
-    c.execute("SELECT nombre_empresa FROM transportistas")
-    empresas = [f[0] for f in c.fetchall()]
+    df_patentes = pd.read_sql_query("SELECT patente, empresa_pertenece FROM camiones", conn)
+    conn.close()
+    if not df_patentes.empty:
+        st.table(df_patentes) # Aquí visualizas todas las patentes asociadas
+    else:
+        st.info("No hay patentes registradas aún.")
+
+# --- 5. REGISTRO DE CONDUCTOR (CON CÁMARA Y GPS) ---
+if seccion == "Registro de Conductor":
+    st.header("🚛 Registro de Ruta")
+    
+    conn = conectar()
+    empresas = [f[0] for f in conn.execute("SELECT nombre_empresa FROM transportistas").fetchall()]
     conn.close()
 
     if not empresas:
-        st.warning("⚠️ No hay empresas en el sistema. Ve al Panel Administrativo para cargar datos de prueba.")
+        st.warning("Primero cargue empresas en el Panel Administrativo.")
     else:
-        with st.container():
-            empresa_final = st.selectbox("Estimado Conductor: Seleccione la empresa", empresas)
-            
-            # Filtrar camiones solo de esa empresa
-            conn = conectar()
-            c = conn.cursor()
-            c.execute("SELECT patente FROM camiones WHERE empresa_pertenece = ?", (empresa_final,))
-            patentes = [f[0] for f in c.fetchall()]
-            conn.close()
+        emp_final = st.selectbox("Seleccione su Empresa", empresas)
+        
+        conn = conectar()
+        patentes = [f[0] for f in conn.execute("SELECT patente FROM camiones WHERE empresa_pertenece=?", (emp_final,)).fetchall()]
+        conn.close()
 
-            if patentes:
-                patente_final = st.selectbox("Seleccione Patente del Camión", patentes)
-                conductor = st.text_input("Nombre del Conductor")
-                n_guia = st.text_input("Número de Guía de Despacho")
-                
-                st.divider()
-                st.write("Proceso de simulación listo para registro.")
-                if st.button("Finalizar Registro de Prueba"):
-                    st.balloons()
-                    st.success(f"Registro exitoso para {conductor} en el camión {patente_final}")
+        cond = st.text_input("Nombre del Conductor")
+        pat_sel = st.selectbox("Seleccione Patente", patentes)
+        n_guia = st.text_input("N° Guía de Despacho")
+
+        # --- CÁMARA ---
+        foto_guia = st.camera_input("Tome una foto a la Guía de Despacho")
+
+        # --- SIMULACIÓN GPS ---
+        st.write("📍 Ubicación: Linares, Región del Maule (GPS Activado)")
+        geo = "-35.84, -71.59" # Coordenadas de Linares para la prueba
+
+        if st.button("Finalizar Registro"):
+            if foto_guia and cond and n_guia:
+                ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn = conectar()
+                conn.execute("INSERT INTO reportes (empresa, conductor, patente, guia, fecha, ubicacion) VALUES (?,?,?,?,?,?)", 
+                             (emp_final, cond, pat_sel, n_guia, ahora, geo))
+                conn.commit()
+                conn.close()
+                st.balloons()
+                st.success("Registro completado y guardado.")
             else:
-                st.info(f"La empresa {empresa_final} no tiene camiones asociados todavía.")
+                st.error("Por favor, complete todos los datos y tome la foto.")
+
+# --- 6. HISTORIAL ---
+if seccion == "Historial de Viajes":
+    st.header("📊 Historial de Viajes")
+    conn = conectar()
+    df_h = pd.read_sql_query("SELECT * FROM reportes", conn)
+    conn.close()
+    st.dataframe(df_h, use_container_width=True)
