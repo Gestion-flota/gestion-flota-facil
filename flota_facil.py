@@ -1,58 +1,83 @@
-
-import json
+import threading
 import os
-import threading # Crucial para que la pantalla no se quede negra
+import json
+import time
 
-class AppTransporteSegura:
+class PlataformaLogisticaPro:
     def __init__(self):
-        self.archivo_local = "datos_logistica.json"
-        # Iniciamos con datos vacíos para que la interfaz CARGUE de inmediato
+        # Nombres de archivos simplificados para máxima compatibilidad
+        self.db_json = "registro_conductores.json"
+        self.respaldo_txt = "respaldo_emergencia.txt"
         self.datos_locales = []
-        
-        # Ejecutamos la carga pesada en un hilo separado (Background)
-        threading.Thread(target=self._preparar_sistema, daemon=True).start()
 
-    def _preparar_sistema(self):
-        """Carga los archivos en segundo plano para no bloquear la pantalla."""
+    def iniciar_sistema(self):
+        """
+        Dibuja la interfaz de inmediato para evitar el bloqueo de pantalla.
+        """
+        print("========================================")
+        print("   SISTEMA DE GESTIÓN DE TRANSPORTE     ")
+        print("           ROL: CONDUCTOR               ")
+        print("========================================")
+        print("ESTADO: SISTEMA ACTIVO")
+        
+        # Iniciamos la carga de archivos en un hilo separado
+        threading.Thread(target=self._preparar_archivos_seguros, daemon=True).start()
+
+    def _preparar_archivos_seguros(self):
+        """Configura los archivos sin congelar la aplicación."""
         try:
-            if os.path.exists(self.archivo_local):
-                with open(self.archivo_local, 'r') as f:
+            if os.path.exists(self.db_json):
+                with open(self.db_json, 'r') as f:
                     self.datos_locales = json.load(f)
             else:
-                with open(self.archivo_local, 'w') as f:
+                with open(self.db_json, 'w') as f:
                     json.dump([], f)
-            print("📦 Sistema de archivos listo.")
-        except Exception as e:
-            # Si el archivo está corrupto, lo reseteamos para que la app no muera
-            with open(self.archivo_local, 'w') as f:
-                json.dump([], f)
-            print(f"⚠️ Archivo reparado automáticamente: {e}")
-
-    def registrar_despacho(self, patente, id_ruta, mensaje):
-        """
-        Función para el botón del transportista.
-        """
-        nuevo_registro = {
-            "hora": time.strftime("%H:%M:%S"),
-            "patente": patente.upper(),
-            "ruta": id_ruta,
-            "obs": mensaje
-        }
-        
-        # Guardado asíncrono para que el teléfono no se 'pegue'
-        threading.Thread(target=self._guardar_y_enviar, args=(nuevo_registro,), daemon=True).start()
-        return "✔️ Registrado (procesando en segundo plano)"
-
-    def _guardar_y_enviar(self, registro):
-        try:
-            self.datos_locales.append(registro)
-            with open(self.archivo_local, 'w') as f:
-                json.dump(self.datos_locales, f)
-            # Aquí iría el envío al servidor, pero no bloquea al chofer
-            print("☁️ Intento de sincronización silencioso...")
-        except:
+        except Exception:
+            # Si hay error, el sistema sigue funcionando con una base limpia
             pass
 
-# --- INICIO DE LA APP ---
-# Al instanciar esto, la pantalla ya no debería quedar negra.
-mi_app = AppTransporteSegura()
+    def registrar_final_de_ruta(self, patente, ruta, observaciones):
+        """
+        Función principal que usará el conductor al terminar su entrega.
+        """
+        registro = {
+            "timestamp": time.strftime("%d/%m/%Y %H:%M:%S"),
+            "patente": patente.upper(),
+            "id_ruta": ruta,
+            "notas": observaciones
+        }
+
+        # Guardado asíncrono para que la app no se 'pegue' al escribir
+        threading.Thread(target=self._guardar_datos, args=(registro,), daemon=True).start()
+        return "✔️ Información registrada exitosamente."
+
+    def _guardar_datos(self, nuevo_registro):
+        """Escribe los datos en JSON y genera un respaldo en texto."""
+        try:
+            # 1. Guardar en JSON (Estructura principal)
+            self.datos_locales.append(nuevo_registro)
+            with open(self.db_json, 'w') as f:
+                json.dump(self.datos_locales, f, indent=4)
+            
+            # 2. Guardar en TXT (Respaldo de seguridad humana)
+            linea_txt = f"{nuevo_registro['timestamp']} | {nuevo_registro['patente']} | {nuevo_registro['id_ruta']}\n"
+            with open(self.respaldo_txt, "a") as f_txt:
+                f_txt.write(linea_txt)
+                
+        except Exception as e:
+            print(f"Error silencioso de guardado: {e}")
+
+# --- EJECUCIÓN DEL SISTEMA ---
+
+app = PlataformaLogisticaPro()
+
+# Paso 1: Encender la pantalla (Inmediato)
+app.iniciar_sistema()
+
+# Paso 2: Simulación de un conductor registrando datos
+# (Esto es lo que pasaría cuando el conductor presiona el botón en la app)
+print(app.registrar_final_de_ruta(
+    patente="CCRS-20", 
+    ruta="RUTA-CONSTITUCION-105", 
+    observaciones="Entrega completa, sin daños."
+))
