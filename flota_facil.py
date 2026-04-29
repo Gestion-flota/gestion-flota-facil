@@ -1,52 +1,64 @@
-import os
-import time
+import streamlit as st
+import pandas as pd
+from datetime import datetime
 
-def limpiar_pantalla():
-    # Esto limpia la pantalla para que el conductor vea todo ordenado
-    os.system('cls' if os.name == 'nt' else 'clear')
+# --- CONFIGURACIÓN DE LA PÁGINA ---
+st.set_page_config(page_title="Plataforma Logística", layout="centered")
 
-def sistema_conductor():
-    while True:
-        limpiar_pantalla()
-        print("========================================")
-        print("    SISTEMA DE LOGISTICA PROFESIONAL    ")
-        print("           MODO: CONDUCTOR              ")
-        print("========================================")
-        print("\n1. REGISTRAR ENTREGA")
-        print("2. VER REPORTE DEL DIA")
-        print("3. SALIR")
-        
-        opcion = input("\nSeleccione una opción (1, 2 o 3): ")
+# Simulación de base de datos de usuarios (PIN: Nombre)
+USUARIOS = {
+    "1234": "Conductor 1",
+    "5678": "Conductor 2",
+    "9999": "Administrador (Transportista)"
+}
 
-        if opcion == "1":
-            patente = input("Ingrese Patente del camión: ").upper()
-            ruta = input("Ingrese ID de la Ruta: ").upper()
-            obs = input("Observaciones: ")
-            
-            # Guardado inmediato en un archivo de texto simple
-            with open("reporte_logistica.txt", "a") as f:
-                f.write(f"Fecha: {time.ctime()} | Patente: {patente} | Ruta: {ruta} | Obs: {obs}\n")
-            
-            print("\n✅ DATOS GUARDADOS CORRECTAMENTE.")
-            time.sleep(2)
-            
-        elif opcion == "2":
-            limpiar_pantalla()
-            print("--- REPORTE DE ENTREGAS ---")
-            if os.path.exists("reporte_logistica.txt"):
-                with open("reporte_logistica.txt", "r") as f:
-                    print(f.read())
-            else:
-                print("No hay registros hoy.")
-            input("\nPresione ENTER para volver al menú...")
-            
-        elif opcion == "3":
-            print("Cerrando sistema...")
-            break
+# --- LÓGICA DE ACCESO ---
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    st.title("🚚 Acceso al Sistema")
+    pin = st.text_input("Ingrese su PIN de seguridad", type="password")
+    
+    if st.button("Entrar"):
+        if pin in USUARIOS:
+            st.session_state.autenticado = True
+            st.session_state.usuario = USUARIOS[pin]
+            st.session_state.es_admin = (pin == "9999")
+            st.rerun()
         else:
-            print("Opción no válida.")
-            time.sleep(1)
+            st.error("PIN incorrecto. Intente de nuevo.")
 
-# Iniciar el programa
-if __name__ == "__main__":
-    sistema_conductor()
+# --- SISTEMA PARA CONDUCTORES ---
+else:
+    st.sidebar.write(f"Usuario: **{st.session_state.usuario}**")
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.autenticado = False
+        st.rerun()
+
+    if not st.session_state.es_admin:
+        st.header("📝 Registro de Jornada")
+        patente = st.text_input("Patente del Camión (Ej: ABCD-12)").upper()
+        ruta = st.text_input("ID de Ruta o Destino")
+        novedades = st.text_area("Novedades del trayecto")
+
+        if st.button("Iniciar / Reportar Trabajo"):
+            if patente and ruta:
+                # Aquí se guardaría en una base de datos real
+                st.success(f"✅ ¡Buen viaje! Patente {patente} registrada a las {datetime.now().strftime('%H:%M')}")
+            else:
+                st.warning("Por favor complete Patente y Ruta.")
+
+    # --- PANEL PARA EL TRANSPORTISTA (ADMIN) ---
+    else:
+        st.header("📊 Panel de Control (Transportista)")
+        st.write("Estado actual de los 20 equipos en trabajo:")
+        
+        # Simulación de los datos que vería el dueño
+        datos_ejemplo = {
+            "Conductor": ["Juan Pérez", "Pedro Soto", "Luis Jara"],
+            "Patente": ["CCRS-20", "ABCD-12", "XY-9988"],
+            "Estado": ["En Ruta", "Descarga", "Iniciando"],
+            "Último Reporte": ["13:45", "14:10", "14:25"]
+        }
+        st.table(pd.DataFrame(datos_ejemplo))
