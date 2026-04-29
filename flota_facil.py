@@ -1,83 +1,52 @@
-import threading
 import os
-import json
 import time
 
-class PlataformaLogisticaPro:
-    def __init__(self):
-        # Nombres de archivos simplificados para máxima compatibilidad
-        self.db_json = "registro_conductores.json"
-        self.respaldo_txt = "respaldo_emergencia.txt"
-        self.datos_locales = []
+def limpiar_pantalla():
+    # Esto limpia la pantalla para que el conductor vea todo ordenado
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-    def iniciar_sistema(self):
-        """
-        Dibuja la interfaz de inmediato para evitar el bloqueo de pantalla.
-        """
+def sistema_conductor():
+    while True:
+        limpiar_pantalla()
         print("========================================")
-        print("   SISTEMA DE GESTIÓN DE TRANSPORTE     ")
-        print("           ROL: CONDUCTOR               ")
+        print("    SISTEMA DE LOGISTICA PROFESIONAL    ")
+        print("           MODO: CONDUCTOR              ")
         print("========================================")
-        print("ESTADO: SISTEMA ACTIVO")
+        print("\n1. REGISTRAR ENTREGA")
+        print("2. VER REPORTE DEL DIA")
+        print("3. SALIR")
         
-        # Iniciamos la carga de archivos en un hilo separado
-        threading.Thread(target=self._preparar_archivos_seguros, daemon=True).start()
+        opcion = input("\nSeleccione una opción (1, 2 o 3): ")
 
-    def _preparar_archivos_seguros(self):
-        """Configura los archivos sin congelar la aplicación."""
-        try:
-            if os.path.exists(self.db_json):
-                with open(self.db_json, 'r') as f:
-                    self.datos_locales = json.load(f)
-            else:
-                with open(self.db_json, 'w') as f:
-                    json.dump([], f)
-        except Exception:
-            # Si hay error, el sistema sigue funcionando con una base limpia
-            pass
-
-    def registrar_final_de_ruta(self, patente, ruta, observaciones):
-        """
-        Función principal que usará el conductor al terminar su entrega.
-        """
-        registro = {
-            "timestamp": time.strftime("%d/%m/%Y %H:%M:%S"),
-            "patente": patente.upper(),
-            "id_ruta": ruta,
-            "notas": observaciones
-        }
-
-        # Guardado asíncrono para que la app no se 'pegue' al escribir
-        threading.Thread(target=self._guardar_datos, args=(registro,), daemon=True).start()
-        return "✔️ Información registrada exitosamente."
-
-    def _guardar_datos(self, nuevo_registro):
-        """Escribe los datos en JSON y genera un respaldo en texto."""
-        try:
-            # 1. Guardar en JSON (Estructura principal)
-            self.datos_locales.append(nuevo_registro)
-            with open(self.db_json, 'w') as f:
-                json.dump(self.datos_locales, f, indent=4)
+        if opcion == "1":
+            patente = input("Ingrese Patente del camión: ").upper()
+            ruta = input("Ingrese ID de la Ruta: ").upper()
+            obs = input("Observaciones: ")
             
-            # 2. Guardar en TXT (Respaldo de seguridad humana)
-            linea_txt = f"{nuevo_registro['timestamp']} | {nuevo_registro['patente']} | {nuevo_registro['id_ruta']}\n"
-            with open(self.respaldo_txt, "a") as f_txt:
-                f_txt.write(linea_txt)
-                
-        except Exception as e:
-            print(f"Error silencioso de guardado: {e}")
+            # Guardado inmediato en un archivo de texto simple
+            with open("reporte_logistica.txt", "a") as f:
+                f.write(f"Fecha: {time.ctime()} | Patente: {patente} | Ruta: {ruta} | Obs: {obs}\n")
+            
+            print("\n✅ DATOS GUARDADOS CORRECTAMENTE.")
+            time.sleep(2)
+            
+        elif opcion == "2":
+            limpiar_pantalla()
+            print("--- REPORTE DE ENTREGAS ---")
+            if os.path.exists("reporte_logistica.txt"):
+                with open("reporte_logistica.txt", "r") as f:
+                    print(f.read())
+            else:
+                print("No hay registros hoy.")
+            input("\nPresione ENTER para volver al menú...")
+            
+        elif opcion == "3":
+            print("Cerrando sistema...")
+            break
+        else:
+            print("Opción no válida.")
+            time.sleep(1)
 
-# --- EJECUCIÓN DEL SISTEMA ---
-
-app = PlataformaLogisticaPro()
-
-# Paso 1: Encender la pantalla (Inmediato)
-app.iniciar_sistema()
-
-# Paso 2: Simulación de un conductor registrando datos
-# (Esto es lo que pasaría cuando el conductor presiona el botón en la app)
-print(app.registrar_final_de_ruta(
-    patente="CCRS-20", 
-    ruta="RUTA-CONSTITUCION-105", 
-    observaciones="Entrega completa, sin daños."
-))
+# Iniciar el programa
+if __name__ == "__main__":
+    sistema_conductor()
