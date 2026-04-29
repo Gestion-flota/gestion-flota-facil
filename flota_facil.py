@@ -1,3 +1,4 @@
+
 import json
 import os
 import threading # Crucial para que la pantalla no se quede negra
