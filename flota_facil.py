@@ -1,96 +1,89 @@
-import streamlit as st
+import json
+import os
+import time
+from datetime import datetime
 
-# 1. Configuración principal
-st.set_page_config(page_title="Transportes Linares", layout="centered")
+class SistemaTransportePro:
+    def __init__(self):
+        self.archivo_local = "cola_envios.json"
+        self.servidor_url = "https://tu-plataforma-principal.cl/api" # Cambiar por tu URL real
+        self._inicializar_almacenamiento()
 
-# 2. Base de datos temporal (El único usuario que existe al inicio es el Administrador)
-if "db_usuarios" not in st.session_state:
-    st.session_state.db_usuarios = {
-        "admin01": {"pin": "admin123", "rol": "transportista"}
-    }
+    def _inicializar_almacenamiento(self):
+        """Crea el archivo local si no existe para evitar errores de lectura."""
+        if not os.path.exists(self.archivo_local):
+            with open(self.archivo_local, 'w') as f:
+                json.dump([], f)
 
-if "sesion" not in st.session_state:
-    st.session_state.sesion = None
+    def registrar_evento_reparto(self, patente, id_ruta, detalle):
+        """
+        Registra la actividad. Es 'a prueba de balas' porque 
+        siempre prioriza el guardado físico en el teléfono.
+        """
+        nuevo_registro = {
+            "id_transaccion": f"{patente}-{int(time.time())}",
+            "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "patente": patente.upper(),
+            "id_ruta": id_ruta,
+            "detalle": detalle,
+            "estado_sincro": "pendiente"
+        }
 
-# ==========================================
-# PANTALLA 1: INICIO DE SESIÓN
-# ==========================================
-def mostrar_login():
-    st.title("🚛 Acceso al Sistema")
-    st.write("Por favor, ingrese sus datos para continuar.")
-    
-    usuario = st.text_input("Usuario")
-    clave = st.text_input("PIN / Clave", type="password") # Palabra corregida
-    
-    if st.button("Ingresar"):
-        db = st.session_state.db_usuarios
-        if usuario in db and db[usuario]["pin"] == clave:
-            st.session_state.sesion = usuario
-            st.rerun()
-        else:
-            st.error("Error: Usuario o Clave incorrectos. Intente nuevamente.")
-
-# ==========================================
-# PANTALLA 2: PANEL DE TRABAJO
-# ==========================================
-def mostrar_panel():
-    usuario_actual = st.session_state.sesion
-    datos_usuario = st.session_state.db_usuarios[usuario_actual]
-    rol = datos_usuario["rol"]
-
-    # --- Barra lateral para salir ---
-    st.sidebar.title(f"👤 {usuario_actual}")
-    st.sidebar.write(f"Rol: {rol.capitalize()}")
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.sesion = None
-        st.rerun()
-
-    # --- VISTA PARA EL DUEÑO (TRANSPORTISTA) ---
-    if rol == "transportista":
-        st.title("📊 Panel de Administración")
-        st.write("Desde aquí puedes gestionar tu flota y crear nuevos accesos.")
-        
-        st.divider()
-        st.subheader("➕ Crear Nuevo Usuario (Conductores)")
-        with st.form("form_crear_usuario", clear_on_submit=True):
-            nuevo_user = st.text_input("Nombre del nuevo usuario (Ej: ANDRES_R)")
-            nuevo_pin = st.text_input("Clave para este usuario (Ej: 1234)")
-            nuevo_rol = st.selectbox("Tipo de cuenta", ["conductor", "transportista"])
+        try:
+            # 1. LEER Y ACTUALIZAR LOCAL (Cero dependencia de internet)
+            with open(self.archivo_local, 'r+') as f:
+                datos = json.load(f)
+                datos.append(nuevo_registro)
+                f.seek(0)
+                json.dump(datos, f, indent=4)
+                f.truncate()
             
-            submit = st.form_submit_button("REGISTRAR USUARIO")
-            if submit:
-                if nuevo_user and nuevo_pin:
-                    st.session_state.db_usuarios[nuevo_user] = {"pin": nuevo_pin, "rol": nuevo_rol}
-                    st.success(f"✅ ¡El usuario '{nuevo_user}' ha sido creado exitosamente!")
-                else:
-                    st.warning("⚠️ Debes ingresar un nombre y una clave.")
-        
-        st.divider()
-        st.subheader("📋 Usuarios Registrados Actualmente")
-        for u, datos in st.session_state.db_usuarios.items():
-            st.write(f"- **{u}** (Rol: {datos['rol']})")
+            print(f"✅ Guardado en memoria del teléfono: {nuevo_registro['id_transaccion']}")
+            
+            # 2. INTENTAR SUBIR AL SISTEMA CENTRAL
+            self.sincronizar_pendientes()
+            
+        except Exception as e:
+            print(f"⚠️ Error al escribir en el teléfono: {e}")
 
-    # --- VISTA PARA EL CHOFER (CONDUCTOR) ---
-    elif rol == "conductor":
-        st.title("📲 Panel del Conductor")
-        st.write("Registra tu actividad de ruta aquí.")
-        
-        patente = st.text_input("Patente del Camión")
-        carga = st.text_input("Detalle del reparto")
-        
-        st.write("📸 Captura de documento/comprobante:")
-        foto = st.camera_input("Tomar foto")
-        
-        if st.button("Enviar Reporte"):
-            if patente and foto:
-                st.success("✅ Reporte enviado correctamente a la central.")
-            else:
-                st.warning("⚠️ Faltan datos o la foto para enviar el reporte.")
+    def sincronizar_pendientes(self):
+        """Intenta enviar todo lo que esté pendiente al servidor."""
+        try:
+            with open(self.archivo_local, 'r') as f:
+                datos = json.load(f)
+            
+            pendientes = [d for d in datos if d["estado_sincro"] == "pendiente"]
+            
+            if not pendientes:
+                return
 
-# ==========================================
-# MOTOR DE ARRANQUE
-# ==========================================
-if st.session_state.sesion is None:
-    mostrar_login()
-else:
-    mostrar_panel()
+            for item in pendientes:
+                # Aquí iría tu conexión real (ejemplo con lógica de éxito)
+                exito = self._comunicar_con_servidor(item)
+                
+                if exito:
+                    item["estado_sincro"] = "sincronizado"
+            
+            # Actualizar el archivo con los nuevos estados
+            with open(self.archivo_local, 'w') as f:
+                json.dump(datos, f, indent=4)
+                
+        except Exception as e:
+            print(f"🌐 Servidor no disponible. Se reintentará en el próximo reparto.")
+
+    def _comunicar_con_servidor(self, payload):
+        """Simula el envío. Retorna True si el servidor responde OK."""
+        # En la realidad, aquí usas la librería 'requests'
+        # return requests.post(self.servidor_url, json=payload).ok
+        return False # Simulamos que el chofer no tiene internet ahora
+
+# --- IMPLEMENTACIÓN EN EL DÍA A DÍA ---
+
+plataforma = SistemaTransportePro()
+
+# Ejemplo: El chofer de Transporte Cáceres termina un despacho
+plataforma.registrar_evento_reparto(
+    patente="CCRS-20", 
+    id_ruta="RUTA-MAULE-500", 
+    detalle="Entrega realizada en Constitución. Cliente conforme."
+)
