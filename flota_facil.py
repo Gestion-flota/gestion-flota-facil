@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- 1. BASE DE DATOS DE TUS CLIENTES (Tú controlas esto) ---
-# Aquí es donde registras a cada empresa que te contrata
+# --- BASE DE DATOS ACTUALIZADA ---
 EMPRESAS = {
     "Transportes Linares": {
         "pin_admin": "9090",
@@ -11,88 +10,60 @@ EMPRESAS = {
             "1111": {"nombre": "Juan Pérez", "patente": "CCRS-20", "ruta": "Talca - Santiago"},
             "2222": {"nombre": "Pedro Soto", "patente": "ABCD-12", "ruta": "Linares - Concepción"}
         }
-    },
-    "Logística Maule": {
-        "pin_admin": "8080",
-        "conductores": {
-            "3333": {"nombre": "Luis Jara", "patente": "XY-9988", "ruta": "Curicó - Chillán"}
-        }
     }
 }
 
-# --- LÓGICA DE NAVEGACIÓN ---
 if "sesion" not in st.session_state:
     st.session_state.sesion = None
 
-def cerrar_sesion():
-    st.session_state.sesion = None
-    st.rerun()
-
-# --- PANTALLA DE ACCESO (LOGIN) ---
+# --- ACCESO ---
 if st.session_state.sesion is None:
-    st.title("🚚 Sistema Central de Transportes")
-    st.subheader("Acceso Seguro")
-    
-    pin_ingresado = st.text_input("Ingrese su PIN", type="password")
-    
+    st.title("🚚 Plataforma Logística Central")
+    pin = st.text_input("Ingrese su PIN", type="password")
     if st.button("Entrar"):
-        encontrado = False
-        # Buscamos en todas las empresas si el PIN coincide con un Dueño o un Conductor
-        for nombre_empresa, datos in EMPRESAS.items():
-            # Check si es Dueño
-            if pin_ingresado == datos["pin_admin"]:
-                st.session_state.sesion = {"tipo": "dueño", "empresa": nombre_empresa}
-                encontrado = True
-                break
-            # Check si es Conductor
-            elif pin_ingresado in datos["conductores"]:
-                info = datos["conductores"][pin_ingresado]
-                st.session_state.sesion = {
-                    "tipo": "conductor", 
-                    "empresa": nombre_empresa,
-                    "nombre": info["nombre"],
-                    "patente": info["patente"],
-                    "ruta": info["ruta"]
-                }
-                encontrado = True
-                break
-        
-        if encontrado:
-            st.rerun()
-        else:
-            st.error("PIN no reconocido.")
+        for nombre, datos in EMPRESAS.items():
+            if pin == datos["pin_admin"]:
+                st.session_state.sesion = {"tipo": "dueño", "empresa": nombre}
+                st.rerun()
+            elif pin in datos["conductores"]:
+                info = datos["conductores"][pin]
+                st.session_state.sesion = {"tipo": "conductor", "nombre": info["nombre"], "patente": info["patente"]}
+                st.rerun()
 
-# --- VISTA DEL CONDUCTOR (SIMPLE Y DIRECTA) ---
+# --- PANTALLA DEL CONDUCTOR (Subir Guía y GPS) ---
 elif st.session_state.sesion["tipo"] == "conductor":
     s = st.session_state.sesion
-    st.title(f"Hola, {s['nombre']}")
-    st.info(f"📍 **Empresa:** {s['empresa']}")
+    st.header(f"Hola {s['nombre']} | Patente: {s['patente']}")
     
-    st.subheader("Asignación de hoy:")
-    col1, col2 = st.columns(2)
-    col1.metric("Patente", s["patente"])
-    col2.metric("Ruta", s["ruta"])
+    st.subheader("📷 Reportar Entrega")
+    # Función para subir foto de la guía
+    foto_guia = st.camera_input("Tome una foto a la guía de flete")
     
-    estado = st.radio("Estado de la jornada:", ["En Espera", "Iniciada", "En Ruta", "Finalizada"])
-    notas = st.text_area("Observaciones (opcional):")
+    if foto_guia:
+        st.success("Foto capturada con éxito.")
     
-    if st.button("Confirmar Reporte"):
-        # Aquí enviarías la información a una base de datos central
-        st.success("✅ Reporte enviado al transportista.")
+    if st.button("Enviar Ubicación GPS y Finalizar"):
+        # Aquí simulamos la captura de coordenadas
+        st.info("📍 Ubicación enviada: -35.59, -71.51 (Linares)")
+        st.success("✅ Jornada reportada correctamente.")
     
-    if st.button("Cerrar Sesión"):
-        cerrar_sesion()
+    if st.button("Salir"):
+        st.session_state.sesion = None
+        st.rerun()
 
-# --- VISTA DEL DUEÑO / TRANSPORTISTA (MONITOREO) ---
+# --- PANTALLA DEL DUEÑO (Mapa y Documentos) ---
 elif st.session_state.sesion["tipo"] == "dueño":
-    empresa = st.session_state.sesion["empresa"]
-    st.title(f"Panel de Control: {empresa}")
+    st.title(f"Panel: {st.session_state.sesion['empresa']}")
     
-    st.subheader("Estado de su Flota")
-    # Mostramos a sus conductores específicos
-    lista_conductores = EMPRESAS[empresa]["conductores"]
-    df = pd.DataFrame.from_dict(lista_conductores, orient='index')
-    st.table(df)
+    # Simulador de Mapa GPS
+    st.subheader("🗺️ Ubicación de Equipos en Tiempo Real")
+    mapa_data = pd.DataFrame({'lat': [-33.44, -35.42], 'lon': [-70.66, -71.67]})
+    st.map(mapa_data) # Esto dibuja un mapa real en la pantalla
     
+    st.subheader("📂 Guías de Flete Recibidas")
+    st.write("1. Guía_Juan_CCRS20.jpg - [Ver Imagen]")
+    st.write("2. Guía_Pedro_ABCD12.jpg - [Ver Imagen]")
+
     if st.button("Cerrar Sesión"):
-        cerrar_sesion()
+        st.session_state.sesion = None
+        st.rerun()
