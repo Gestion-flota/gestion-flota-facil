@@ -3,126 +3,100 @@ import pandas as pd
 import sqlite3
 import datetime
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Plataforma Central Logística", page_icon="🚚", layout="wide")
+# --- CONFIGURACIÓN DE LA PLATAFORMA ---
+st.set_page_config(page_title="Plataforma Logística Central", layout="wide")
 
-# --- INICIALIZACIÓN DE LA BASE DE DATOS (El "Cerebro") ---
-# Esto crea un archivo 'logistica_datos.db' donde se guardan las fotos y GPS
-def init_db():
-    conn = sqlite3.connect('logistica_datos.db')
+# --- SISTEMA DE ARCHIVO INTERNO ---
+def inicializar_base_datos():
+    conn = sqlite3.connect('logistica_v3.db')
     c = conn.cursor()
+    # Registramos: Fecha, Tu Cliente, Chofer, Patente, Empresa Destino, Ubicación y Foto
     c.execute('''CREATE TABLE IF NOT EXISTS reportes 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, empresa TEXT, chofer TEXT, 
-                  latitud REAL, longitud REAL, foto BLOB)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, empresa_transportista TEXT, 
+                  chofer TEXT, patente TEXT, cliente_destino TEXT, latitud REAL, longitud REAL, foto BLOB)''')
     conn.commit()
     conn.close()
 
-init_db()
+inicializar_base_datos()
 
-# --- TU GESTIÓN DE CLIENTES (Configuración de PINes) ---
+# --- GESTIÓN DE TUS CLIENTES (Transportistas) ---
+# Aquí es donde tú controlas quién accede al servicio
 CLIENTES = {
     "Transportes Linares": {
-        "pin_master": "9090",
-        "choferes": {
-            "1111": "Juan Pérez",
-            "2222": "Pedro Soto"
-        }
-    },
-    "Transportes Maule": {
-        "pin_master": "8080",
-        "choferes": {
-            "3333": "Carlos Jara"
-        }
+        "pin_dueño": "9090", 
+        "choferes": {"1111": "Juan Pérez", "2222": "Pedro Soto"}
     }
 }
 
-# --- LÓGICA DE ACCESO ---
-if "login" not in st.session_state:
-    st.session_state.login = None
+if "sesion" not in st.session_state:
+    st.session_state.sesion = None
 
-# Pantalla de Login si no está autenticado
-if st.session_state.login is None:
+# --- PANTALLA DE INGRESO ---
+if st.session_state.sesion is None:
     st.title("🚚 Acceso al Sistema Central")
-    pin = st.text_input("Ingrese su PIN de Seguridad", type="password")
-    
+    pin_entrada = st.text_input("Ingrese su PIN de Seguridad", type="password")
     if st.button("Entrar"):
-        found = False
-        # Buscamos si el PIN corresponde a un dueño o chofer
-        for empresa, datos in CLIENTES.items():
-            if pin == datos["pin_master"]:
-                st.session_state.login = {"tipo": "dueño", "empresa": empresa}
-                found = True
-                break
-            elif pin in datos["choferes"]:
-                st.session_state.login = {"tipo": "chofer", "empresa": empresa, "nombre": datos["choferes"][pin]}
-                found = True
-                break
-        
-        if found: st.rerun()
-        else: st.error("PIN incorrecto.")
+        for emp, datos in CLIENTES.items():
+            if pin_entrada == datos["pin_dueño"]:
+                st.session_state.sesion = {"tipo": "dueño", "empresa": emp}
+                st.rerun()
+            elif pin_entrada in datos["choferes"]:
+                st.session_state.sesion = {"tipo": "chofer", "empresa": emp, "nombre": datos["choferes"][pin_entrada]}
+                st.rerun()
+        st.error("PIN no válido")
 
 else:
-    u = st.session_state.login
-    
-    # BOTÓN DE CERRAR SESIÓN (Siempre visible arriba)
+    s = st.session_state.sesion
     if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.login = None
+        st.session_state.sesion = None
         st.rerun()
 
-    # --- VISTA DEL CHOFER (En su Teléfono) ---
-    if u["tipo"] == "chofer":
-        st.header(f"Hola {u['nombre']} - {u['empresa']}")
-        st.divider()
+    # --- LO QUE VE EL CONDUCTOR (Simplicidad total) ---
+    if s["tipo"] == "chofer":
+        st.header(f"Hola {s['nombre']}")
+        st.subheader("Registro de Servicio")
         
-        st.subheader("Registrar Transporte")
-        # --- CÁMARA TRASERA OBLIGATORIA (Corrección) ---
-        # Usamos el modo captura de archivos para dar la opción de cámara trasera en el celular
-        foto = st.file_uploader("Subir o capturar foto de la Guía", type=["jpg", "png", "jpeg"], accept_multiple_files=False)
+        # Campos obligatorios
+        patente = st.text_input("Patente del Camión", placeholder="Ej: CCRS-20")
+        cliente_destino = st.text_input("Empresa a la que presta servicio", placeholder="Ej: Frutícola El Monte")
         
-        # Simulamos GPS de Linares para que el mapa funcione
-        lat, lon = -35.84, -71.59
+        st.write("### Subir Guía de Despacho")
+        # El componente de carga activa la cámara trasera automáticamente en móviles
+        foto_archivo = st.file_uploader("Presione para activar cámara trasera y tomar foto", type=["jpg", "png", "jpeg"])
         
-        if foto:
-            st.image(foto, caption="Vista Previa", use_container_width=True)
-            if st.button("Enviar Reporte Final"):
-                # Guardamos en la base de datos interna
-                conn = sqlite3.connect('logistica_datos.db')
+        if st.button("🚀 Enviar Reporte Ahora"):
+            if patente and cliente_destino and foto_archivo:
+                # Simulación de ubicación en Linares
+                lat, lon = -35.84, -71.59
+                
+                conn = sqlite3.connect('logistica_v3.db')
                 c = conn.cursor()
-                c.execute("INSERT INTO reportes (fecha, empresa, chofer, latitud, longitud, foto) VALUES (?,?,?,?,?,?)",
-                          (datetime.datetime.now().strftime("%d/%m/%Y %H:%M"), u['empresa'], u['nombre'], lat, lon, foto.read()))
+                c.execute("""INSERT INTO reportes (fecha, empresa_transportista, chofer, patente, cliente_destino, latitud, longitud, foto) 
+                             VALUES (?,?,?,?,?,?,?,?)""",
+                          (datetime.datetime.now().strftime("%d/%m/%Y %H:%M"), s['empresa'], s['nombre'], 
+                           patente.upper(), cliente_destino, lat, lon, foto_archivo.read()))
                 conn.commit()
                 conn.close()
-                
-                st.success("✅ Reporte archivado. El transportista ya puede verlo.")
+                st.success("✅ Reporte enviado correctamente.")
                 st.balloons()
+            else:
+                st.error("Por favor completa todos los datos y toma la foto.")
 
-    # --- VISTA DEL TRANSPORTISTA (Tu Cliente) ---
-    elif u["tipo"] == "dueño":
-        st.title(f"Panel de Control: {u['empresa']}")
+    # --- LO QUE VE EL TRANSPORTISTA (Fácil y directo) ---
+    elif s["tipo"] == "dueño":
+        st.title(f"Panel: {s['empresa']}")
         
-        # Cargamos los datos de la base de datos interna
-        conn = sqlite3.connect('logistica_datos.db')
-        # Buscamos solo los datos que corresponden a esta empresa
-        query = f"SELECT * FROM reportes WHERE empresa = '{u['empresa']}'"
-        df = pd.read_sql_query(query, conn)
+        conn = sqlite3.connect('logistica_v3.db')
+        df = pd.read_sql_query(f"SELECT fecha, chofer, patente, cliente_destino, latitud, longitud FROM reportes WHERE empresa_transportista = '{s['empresa']}'", conn)
         conn.close()
 
-        tab1, tab2 = st.tabs(["📍 Mapa de Flota", "📋 Historial"])
+        menu = st.radio("Ver información:", ["Mapa de Flota", "Historial de Guías"], horizontal=True)
         
-        with tab1:
-            st.subheader("Equipos en función (Último reporte)")
-            # --- CORRECCIÓN DEL MAPA ---
-            # Solo dibujamos si el DataFrame 'df' no está vacío
+        if menu == "Mapa de Flota":
             if not df.empty:
-                # El componente st.map necesita una tabla con columnas 'lat' y 'lon'
-                st.map(df[['latitud', 'longitud']])
+                st.map(df)
             else:
-                st.info("Aún no hay reportes de equipos registrados en esta flota.")
-                
-        with tab2:
-            st.subheader("Archivo de Transportes")
-            # Mostramos la tabla completa para que el transportista descargue su reporte
-            st.dataframe(df.drop(columns=['foto']), use_container_width=True) # Ocultamos el blob de la foto
-
-st.sidebar.divider()
-st.sidebar.caption("Plataforma Administrada Centralmente")
+                st.info("No hay camiones en función todavía.")
+        else:
+            st.write("### Lista de Transportes Realizados")
+            st.dataframe(df.sort_values(by="fecha", ascending=False), use_container_width=True)
