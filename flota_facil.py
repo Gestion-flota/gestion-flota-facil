@@ -6,44 +6,27 @@ from datetime import datetime
 import urllib.parse
 
 # ==========================================
-# 1. CONFIGURACIÓN Y DISEÑO PROFESIONAL
+# 1. CONFIGURACIÓN INICIAL
 # ==========================================
 st.set_page_config(page_title="Gestión Flota Fácil", layout="wide")
-
-# Inyección de CSS para diseño moderno
-st.markdown("""
-    <style>
-    /* Fondo general y tipografía */
-    .stApp { background-color: #f4f7f6; }
-    h1 { color: #1e3a8a; font-family: 'Segoe UI', Helvetica, sans-serif; text-align: center; font-weight: 700; margin-bottom: 30px; }
-    h2, h3, p, span { color: #2c3e50; font-family: 'Segoe UI', Helvetica, sans-serif; }
-    
-    /* Estilo de botones profesionales */
-    div.stButton > button {
-        background-color: #2563eb; color: white; border-radius: 8px;
-        padding: 10px 24px; font-weight: bold; border: none; width: 100%;
-        transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    div.stButton > button:hover { background-color: #1d4ed8; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
-    
-    /* Estilo de los campos de texto */
-    .stTextInput > div > div > input { border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px; }
-    
-    /* Panel lateral (Sidebar) */
-    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
-    </style>
-""", unsafe_allow_html=True)
 
 # ==========================================
 # 2. SEGURIDAD A PRUEBA DE ERRORES
 # ==========================================
-# Usamos .strip() para destruir automáticamente cualquier espacio o salto de línea invisible
-SUPABASE_URL = st.secrets["SUPABASE_URL"].strip().replace("\n", "").replace("\r", "")
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip().replace("\n", "").replace("\r", "")
+# Usamos .strip() para limpiar cualquier espacio basura que se cuele al copiar
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"].strip().replace("\n", "").replace("\r", "")
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip().replace("\n", "").replace("\r", "")
+except KeyError:
+    st.error("⚠️ Faltan las credenciales en los Secrets de Streamlit.")
+    st.stop()
 
 def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
     """Motor central de comunicación con la base de datos"""
-    url = f"{SUPABASE_URL}/rest/v1/{tabla}"
+    # Nos aseguramos de que la URL no termine en un '/' extra
+    base_url = SUPABASE_URL[:-1] if SUPABASE_URL.endswith('/') else SUPABASE_URL
+    url = f"{base_url}/rest/v1/{tabla}"
+    
     if filtros:
         url += f"?{filtros}"
 
@@ -62,8 +45,11 @@ def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
         
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.ConnectionError:
+        st.error(f"❌ Error crítico de conexión: La URL de Supabase es incorrecta o no existe. Verifica que esté bien escrita en los Secrets.")
+        return None
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"⚠️ Error al consultar la base de datos: {e}")
         return None
 
 # ==========================================
@@ -71,7 +57,7 @@ def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
 # ==========================================
 st.title("🚛 Gestión Flota Fácil")
 
-# SOLUCIÓN: El perfil de Administrador ahora sí existe en las opciones
+# El menú ahora incluye al Administrador
 menu = st.sidebar.selectbox("Perfil de Usuario", ["Transportista", "Conductor", "Administrador"])
 
 # --- MÓDULO TRANSPORTISTA ---
@@ -87,14 +73,14 @@ if menu == "Transportista":
         
         with col1:
             st.subheader("Iniciar Sesión")
-            log_email = st.text_input("Correo electrónico").lower().strip()
-            log_pass = st.text_input("Contraseña", type="password")
+            log_email = st.text_input("Correo electrónico", key="log_email").lower().strip()
+            log_pass = st.text_input("Contraseña", type="password", key="log_pass")
             if st.button("Ingresar"):
                 seguro_email = urllib.parse.quote(log_email)
                 res = ejecutar_consulta("empresas", filtros=f"correo=eq.{seguro_email}")
-                if res and res[0]['password'] == log_pass:
+                if res and len(res) > 0 and res[0].get('password') == log_pass:
                     st.session_state["usuario"] = log_email
-                    st.session_state["nombre_empresa"] = res[0]['empresa']
+                    st.session_state["nombre_empresa"] = res[0].get('empresa', 'Empresa')
                     st.rerun()
                 else: 
                     st.error("Correo o contraseña incorrectos")
@@ -197,7 +183,6 @@ elif menu == "Administrador":
         empresas = ejecutar_consulta("empresas")
         if empresas:
             df_empresas = pd.DataFrame(empresas)
-            # Ocultamos la columna de contraseñas para que no se vea en pantalla
             if 'password' in df_empresas.columns:
                 df_empresas = df_empresas.drop(columns=['password'])
             st.dataframe(df_empresas, use_container_width=True)
