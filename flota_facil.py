@@ -1,4 +1,5 @@
 
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -6,25 +7,53 @@ from datetime import datetime
 import urllib.parse
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL
+# 1. CONFIGURACIÓN Y DISEÑO PROFESIONAL
 # ==========================================
 st.set_page_config(page_title="Gestión Flota Fácil", layout="wide")
 
-# Seguridad: Las credenciales ahora viven protegidas en la nube
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+# Inyección de CSS para diseño moderno
+st.markdown("""
+    <style>
+    /* Fondo general y tipografía */
+    .stApp { background-color: #f4f7f6; }
+    h1 { color: #1e3a8a; font-family: 'Segoe UI', Helvetica, sans-serif; text-align: center; font-weight: 700; margin-bottom: 30px; }
+    h2, h3, p, span { color: #2c3e50; font-family: 'Segoe UI', Helvetica, sans-serif; }
+    
+    /* Estilo de botones profesionales */
+    div.stButton > button {
+        background-color: #2563eb; color: white; border-radius: 8px;
+        padding: 10px 24px; font-weight: bold; border: none; width: 100%;
+        transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    div.stButton > button:hover { background-color: #1d4ed8; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    
+    /* Estilo de los campos de texto */
+    .stTextInput > div > div > input { border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px; }
+    
+    /* Panel lateral (Sidebar) */
+    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 2. SEGURIDAD A PRUEBA DE ERRORES
+# ==========================================
+# Usamos .strip() para destruir automáticamente cualquier espacio o salto de línea invisible
+SUPABASE_URL = st.secrets["SUPABASE_URL"].strip().replace("\n", "").replace("\r", "")
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip().replace("\n", "").replace("\r", "")
 
 def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
     """Motor central de comunicación con la base de datos"""
     url = f"{SUPABASE_URL}/rest/v1/{tabla}"
     if filtros:
         url += f"?{filtros}"
-        
+
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
         "Prefer": "return=representation"
+    }
     }
     
     try:
