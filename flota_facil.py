@@ -1,5 +1,4 @@
 
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -54,7 +53,6 @@ def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
         "Content-Type": "application/json",
         "Prefer": "return=representation"
     }
-    }
     
     try:
         if metodo == "POST":
@@ -69,10 +67,12 @@ def ejecutar_consulta(tabla, metodo="GET", datos=None, filtros=None):
         return None
 
 # ==========================================
-# 2. INTERFAZ DE USUARIO
+# 3. INTERFAZ DE USUARIO PRINCIPAL
 # ==========================================
 st.title("🚛 Gestión Flota Fácil")
-menu = st.sidebar.selectbox("Perfil de Usuario", ["Transportista", "Conductor"])
+
+# SOLUCIÓN: El perfil de Administrador ahora sí existe en las opciones
+menu = st.sidebar.selectbox("Perfil de Usuario", ["Transportista", "Conductor", "Administrador"])
 
 # --- MÓDULO TRANSPORTISTA ---
 if menu == "Transportista":
@@ -180,3 +180,26 @@ elif menu == "Conductor":
                     st.success("Reporte enviado al transportista exitosamente.")
         else:
             st.error("❌ Patente no registrada.")
+
+# --- MÓDULO ADMINISTRADOR ---
+elif menu == "Administrador":
+    st.header("⚙️ Panel de Administración Global")
+    st.warning("Área restringida para supervisión general del sistema.")
+    
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.metric(label="Proyección de Escalamiento", value="Hasta 50 Camiones")
+    with col_m2:
+        st.metric(label="Estado de Conexión", value="Operativa")
+        
+    st.subheader("Directorio de Empresas Registradas")
+    if st.button("Cargar Base de Datos"):
+        empresas = ejecutar_consulta("empresas")
+        if empresas:
+            df_empresas = pd.DataFrame(empresas)
+            # Ocultamos la columna de contraseñas para que no se vea en pantalla
+            if 'password' in df_empresas.columns:
+                df_empresas = df_empresas.drop(columns=['password'])
+            st.dataframe(df_empresas, use_container_width=True)
+        else:
+            st.info("Aún no hay empresas registradas en el sistema.")
